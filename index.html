@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>31薪資明細 - 自動辨識版</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <style>
+        h1 { width: fit-content; margin: 0 auto; }
+        body, table, th, td, input, select { font-size: 16px; }
+        select { width: 60px; }
+        table { width: 99%; border-collapse: collapse; margin-top: 10px; }
+        table, th, td { border: 1px solid black; }
+        th, td { padding: 8px; text-align: center; }
+        td:nth-child(7) { text-align: left; } 
+
+        .control-panel { background: #f0f0f0; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
+        button {
+            height: 40px; font-size: 16px; background-color: #FFF;
+            color: #000; border-radius: 20px; cursor: pointer; font-weight: bold;
+            margin-left: 3px; transition: 0.3s; padding: 0 15px;
+        }
+        .holiday { border: 3px solid rgb(170, 36, 36); }
+        .print { border: 3px solid rgb(206, 115, 224); }
+        .clear { border: 3px solid rgb(209, 0, 0); }
+        .ocr-btn { border: 3px solid #28a745; background-color: #e9f7ef; }
+        
+        .holiday:hover { background-color: rgb(170, 36, 36); color: #FFF; }
+        .print:hover { background-color: rgb(206, 115, 224); color: #FFF; }
+        .clear:hover { background-color: rgb(209, 0, 0); color: #FFF; }
+        .ocr-btn:hover { background-color: #28a745; color: #FFF; }
+
+        input { width: 80px; height: 25px; text-align: center; }
+        tfoot tr td { background-color: #f9f9f9; font-weight: bold; }
+        .final-row { background-color: #e6f3ff !important; font-size: 1.2em; }
+        .total-text { color: red; }
+
+        #ocrStatus { font-weight: normal; font-size: 14px; margin-left: 10px; color: #666; }
+
+        @media print {
+            button, #backToTopBtn, #printDisappear, .ocr-section { display: none !important; }
+            th:nth-child(3), td:nth-child(3) { display: none !important; }
+            tr.is-holiday-row { display: none !important; }
+            input { border: none; background: none; }
+            table { width: 100%; }
+        }
+
+        .backToTopBtn {
+            display: none; position: fixed; bottom: 30px; right: 30px;
+            z-index: 99; width: 45px; height: 55px; font-size: 32px;
+            border-radius: 30px; background-color: white; color: rgb(25, 11, 153);
+            border: 3px solid rgb(25, 11, 153); cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <button onclick="scrollToTop()" id="backToTopBtn">⬆</button>
+    <h1>31薪資明細表</h1>
+
+    <div id="printDisappear" class="control-panel">
+        員工：<select id="employeeSelect" onchange="loadData(); calculate();"></select>
+        <select id="selectyear" onchange="generateDates(); loadData(); calculate();"></select> 年
+        <select id="selectmonth" onchange="generateDates(); loadData(); calculate();"></select> 月
+        ｜ 時薪：<span id="employeeRateDisplay">0</span> 元
+        ｜ 實領：<span id="headerFinalSalary" style="color: blue; font-weight: bold;">0</span>
+        <br><br>
+        <div class="ocr-section">
+            <strong>📷 自動擷取：</strong>
+            <input type="file" id="uploadOCR" accept="image/*" style="display:none;">
+            <button class="ocr-btn" onclick="document.getElementById('uploadOCR').click()">選擇打卡截圖</button>
+            <span id="ocrStatus">等待上傳...</span>
+            <button class="print" onclick="window.print()">列印</button>
+            <button class="clear" onclick="clearTable()">清除</button> 
+        </div>
+    </div>
+
+    <table> 
+        <thead>
+            <tr>
+                <th style="width: 8%;">日期</th>
+                <th style="width: 8%;">星期</th>
+                <th style="width: 10%;">狀態</th>
+                <th style="width: 12%;">上班</th>
+                <th style="width: 12%;">下班</th>
+                <th style="width: 20%;">本日工時</th>
+                <th style="width: 30%;">明細</th>
+            </tr>
+        </thead>
+        <tbody id="workDates"></tbody>
+        <tfoot>
+            <tr>
+                <td colspan="5" style="text-align: right;">應領工資總計：</td>
+                <td id="footerTotalSalary" class="total-text">0 元</td>
+                <td></td>
+            </tr>
+            <tr>
+                <td colspan="5" style="text-align: right;">固定扣除 (勞保500+健保458)：</td>
+                <td style="color: #cc0000;">-958 元</td>
+                <td></td>
+            </tr>
+            <tr class="final-row">
+                <td colspan="5" style="text-align: right;">實領金額：</td>
+                <td id="footerFinalSalary" style="color: blue;">0 元</td>
+                <td></td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <script>
+        const LABOR_FEE = 500;
+        const HEALTH_FEE = 458;
+
+        function getEmployees() { return JSON.parse(localStorage.getItem("employees") || "[]"); }
+
+        // --- OCR 邏輯區 ---
+        document.getElementById('uploadOCR').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const status = document.getElementById('ocrStatus');
+            status.innerText = "正在讀取圖片文字 (請稍候)...";
+
+            Tesseract.recognize(file, 'eng', {
+                logger: m => { if(m.status === 'recognizing text') status.innerText = `辨識中: ${Math.round(m.progress * 100)}%`; }
+            }).then(({ data: { text } }) => {
+                status.innerText = "辨識完成，正在對齊日期...";
+                parseAndFillOCR(text);
+                status.innerText = "擷取成功！";
+            }).catch(err => {
+                status.innerText = "辨識失敗，請確保圖片清晰。";
+                console.error(err);
+            });
+        });
+
+        function parseAndFillOCR(text) {
+            const currentMonth = document.getElementById('selectmonth').value.padStart(2, '0');
+            const lines = text.split('\n');
+            
+            lines.forEach(line => {
+                // 匹配格式 YYYY-MM-DD HH:mm:ss
+                const match = line.match(/(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})/);
+                if (match) {
+                    const [_, year, month, day, hour, min] = match;
+                    if (month === currentMonth) {
+                        const dayInt = parseInt(day, 10);
+                        const sInput = document.getElementById(`Start-${dayInt}`);
+                        const eInput = document.getElementById(`End-${dayInt}`);
+                        const hhmm = hour + min;
+
+                        // 如果該行包含 "下班" 關鍵字 (或簡單邏輯: 有值了就填下一個)
+                        if (line.includes('下') || line.includes('下班') || sInput.value !== "") {
+                            if (sInput.value !== hhmm) eInput.value = hhmm; // 避免上下班填到同一個時間
+                        } else {
+                            sInput.value = hhmm;
+                        }
+                    }
+                }
+            });
+            calculate();
+        }
+
+        // --- 原有邏輯區 ---
+        function initYearMonth() {
+            const yearSel = document.getElementById('selectyear');
+            const monthSel = document.getElementById('selectmonth');
+            const now = new Date();
+            for (let i = now.getFullYear() - 2; i <= now.getFullYear() + 2; i++) {
+                let opt = new Option(i, i);
+                if (i === now.getFullYear()) opt.selected = true;
+                yearSel.add(opt);
+            }
+            for (let i = 1; i <= 12; i++) {
+                let opt = new Option(i, i);
+                if (i === (now.getMonth() + 1)) opt.selected = true;
+                monthSel.add(opt);
+            }
+        }
+
+        function generateDates() {
+            const year = document.getElementById('selectyear').value;
+            const month = document.getElementById('selectmonth').value;
+            const days = new Date(year, month, 0).getDate();
+            const weeks = ['日', '一', '二', '三', '四', '五', '六'];
+            const tbody = document.getElementById('workDates');
+            tbody.innerHTML = '';
+
+            for (let d = 1; d <= days; d++) {
+                const dateObj = new Date(year, month - 1, d);
+                const row = document.createElement('tr');
+                row.id = `row-${d}`;
+                row.innerHTML = `
+                    <td>${month}/${d.toString().padStart(2, '0')}</td>
+                    <td>${weeks[dateObj.getDay()]}</td>
+                    <td><button class="holiday" onclick="toggleHoliday(${d}, this)">休</button></td>
+                    <td><input type="text" id="Start-${d}" placeholder="HHMM" oninput="calculate()"></td>
+                    <td><input type="text" id="End-${d}" placeholder="HHMM" oninput="calculate()"></td>
+                    <td><span id="Hours-${d}"></span></td>
+                    <td><span id="Detail-${d}"></span></td>
+                `;
+                tbody.appendChild(row);
+            }
+        }
+
+        function calculate() {
+            const empIdx = document.getElementById("employeeSelect").value;
+            const employees = getEmployees();
+            if (empIdx === "" || !employees[empIdx]) return;
+
+            const rate = employees[empIdx].rate;
+            document.getElementById("employeeRateDisplay").innerText = rate;
+            let totalSalary = 0;
+            let saveData = { days: {} };
+
+            for (let d = 1; d <= 31; d++) {
+                const sInput = document.getElementById(`Start-${d}`);
+                if (!sInput) continue;
+                const eInput = document.getElementById(`End-${d}`);
+                const hSpan = document.getElementById(`Hours-${d}`);
+                const dSpan = document.getElementById(`Detail-${d}`);
+
+                const s = parseTime(sInput.value);
+                const e = parseTime(eInput.value);
+                saveData.days[d] = { s: sInput.value, e: eInput.value, isHoliday: sInput.disabled };
+
+                if (s && e) {
+                    let rS = Math.ceil(s.total / 30) * 30;
+                    let rE = Math.floor(e.total / 30) * 30;
+                    let diff = rE - rS;
+                    if (diff < 0) diff += 1440;
+                    let hrs = diff / 60;
+                    let finalHrs = hrs;
+                    let note = "無扣除";
+                    if (hrs > 8) { finalHrs = hrs - 1; note = "扣 1hr"; }
+                    else if (hrs > 4) { finalHrs = hrs - 0.5; note = "扣 0.5hr"; }
+
+                    const pay = Math.floor(finalHrs * rate);
+                    hSpan.innerText = `${finalHrs}h (${note})`;
+                    dSpan.innerText = `${finalHrs}h × ${rate} = ${pay}元`;
+                    totalSalary += pay;
+                } else {
+                    hSpan.innerText = sInput.disabled ? "休" : "";
+                    dSpan.innerText = "";
+                }
+            }
+
+            const final = totalSalary - LABOR_FEE - HEALTH_FEE;
+            document.getElementById("footerTotalSalary").innerText = totalSalary + " 元";
+            document.getElementById("footerFinalSalary").innerText = final + " 元";
+            document.getElementById("headerFinalSalary").innerText = final + " 元";
+            saveToBrowser(saveData);
+        }
+
+        function parseTime(str) {
+            if (!/^\d{4}$/.test(str)) return null;
+            const h = parseInt(str.substring(0, 2)), m = parseInt(str.substring(2, 4));
+            return (h < 24 && m < 60) ? { total: h * 60 + m } : null;
+        }
+
+        function saveToBrowser(data) {
+            const empIdx = document.getElementById("employeeSelect").value;
+            const year = document.getElementById("selectyear").value;
+            const month = document.getElementById("selectmonth").value;
+            if (empIdx !== "") localStorage.setItem(`salaryData_${empIdx}_${year}_${month}`, JSON.stringify(data));
+        }
+
+        function loadData() {
+            const empIdx = document.getElementById("employeeSelect").value;
+            const year = document.getElementById("selectyear").value;
+            const month = document.getElementById("selectmonth").value;
+            const saved = JSON.parse(localStorage.getItem(`salaryData_${empIdx}_${year}_${month}`));
+            if (!saved) return;
+            Object.keys(saved.days).forEach(d => {
+                const s = document.getElementById(`Start-${d}`), e = document.getElementById(`End-${d}`);
+                if (s && e) {
+                    s.value = saved.days[d].s; e.value = saved.days[d].e;
+                    if (saved.days[d].isHoliday) toggleHoliday(d, document.querySelector(`#row-${d} .holiday`), true);
+                }
+            });
+            calculate();
+        }
+
+        function toggleHoliday(d, btn, force) {
+            const row = document.getElementById(`row-${d}`), ins = row.querySelectorAll('input');
+            const state = force !== undefined ? !force : ins[0].disabled;
+            ins.forEach(i => { i.disabled = !state; if(!state) i.value = ''; });
+            row.style.backgroundColor = state ? '' : '#ffcccc';
+            btn.style.backgroundColor = state ? '#FFF' : '#aa2424';
+            btn.style.color = state ? '#000' : '#FFF';
+            if (force === undefined) calculate();
+        }
+
+        function renderEmployeeSelect() {
+            const emps = getEmployees(), sel = document.getElementById("employeeSelect");
+            sel.innerHTML = '<option value="">請選擇</option>';
+            emps.forEach((e, i) => sel.add(new Option(e.name, i)));
+        }
+
+        function clearTable() { if (confirm("確定清空？")) { generateDates(); calculate(); } }
+        function scrollToTop() { window.scrollTo({ top: 0, behavior: 'smooth' }); }
+        window.onscroll = () => { document.getElementById("backToTopBtn").style.display = (document.documentElement.scrollTop > 300) ? "block" : "none"; };
+
+        window.onload = () => { initYearMonth(); generateDates(); renderEmployeeSelect(); };
+    </script>
+</body>
+</html>
