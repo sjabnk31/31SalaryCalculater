@@ -2,93 +2,181 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>員工資料管理</title>
     <style>
-    h1 {
-        width: fit-content;
-        margin: 0 auto;
-    }
+        :root {
+            --primary: #ce73e4;
+            --warning: #ffaa00;
+            --danger: #d10000;
+            --bg-gray: #f8f9fa;
+        }
 
-    body, table, th, td, input {
-        font-size: 16px;
-    }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-gray);
+            margin: 0;
+            padding: 15px;
+            color: #333;
+        }
 
-    table {
-        width: 90%;
-        border-collapse: collapse;
-        margin: 20px auto;
-    }
+        h1 {
+            text-align: center;
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: #222;
+        }
 
-    table, th, td {
-        border: 1px solid black;
-    }
+        /* 輸入區域卡片化 */
+        .input-card {
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
 
-    th, td {
-        padding: 8px;
-        text-align: center;
-    }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
 
-    /* 按鈕樣式 */
-    button {
-        width: 70px;
-        height: 40px;
-        font-size: 16px;
-        background-color: #FFF;
-        color: #000;
-        border-radius: 20px;
-        cursor: pointer;
-        font-weight: bold;
-        justify-content: center;
-        margin-left: 3px;
-        transition: 0.3s;
-    }
+        input {
+            width: 100%;
+            height: 45px; /* 加大高度方便輸入 */
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 0 12px;
+            font-size: 16px; /* 防止 iOS 自動縮放 */
+        }
 
-    .Add { border: 3px solid rgb(206, 115, 224) }
-    .Edit { border: 3px solid rgb(255, 170, 0); }
-    .Delete { border: 3px solid rgb(209, 0, 0); }
+        .btn-group-main {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
 
-    /* 只有非 disabled 才有 hover 效果 */
-    .Add:not(:disabled):hover,
-    .Edit:not(:disabled):hover,
-    .Delete:not(:disabled):hover {
-        color: #FFF;
-    }
+        /* 按鈕通用樣式 */
+        button {
+            flex: 1;
+            height: 48px;
+            border-radius: 24px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            border: 3px solid transparent;
+            transition: 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
 
-    .Add:not(:disabled):hover { background-color: rgb(206, 115, 224);}
-    .Edit:not(:disabled):hover { background-color: rgb(255, 170, 0); }
-    .Delete:not(:disabled):hover { background-color: rgb(209, 0, 0); }
+        .Add { border-color: var(--primary); background: white; color: var(--primary); }
+        .Edit { border-color: var(--warning); background: white; color: var(--warning); }
+        .Delete { border-color: var(--danger); background: white; color: var(--danger); }
 
-    input {
-        width: 150px;
-        height: 30px;
-        text-align: center;
-    }
+        /* 按鈕點擊效果 */
+        button:active {
+            opacity: 0.7;
+            transform: scale(0.98);
+        }
 
-    /* disabled 樣式 */
-    button:disabled {
-        background-color: #e0e0e0;  
-        color: #000000;          
-        border: 3px solid #4d4d4d;
-        cursor: not-allowed;       
-        opacity: 0.6;
-    }
-</style>
+        .Add:not(:disabled):active { background-color: var(--primary); color: white; }
+        .Edit:not(:disabled):active { background-color: var(--warning); color: white; }
+        .Delete:not(:disabled):active { background-color: var(--danger); color: white; }
 
+        button:disabled {
+            border-color: #ccc;
+            color: #999;
+            cursor: not-allowed;
+        }
+
+        /* 列表轉為卡片 */
+        #employeeList {
+            margin-bottom: 80px; /* 留空間給底部按鈕 */
+        }
+
+        .emp-card {
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .emp-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .emp-name {
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        .emp-rate {
+            color: #666;
+            font-size: 0.9rem;
+            margin-top: 4px;
+        }
+
+        .emp-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .emp-actions button {
+            width: 60px;
+            height: 36px;
+            font-size: 14px;
+            border-width: 2px;
+        }
+
+        /* 底部固定導航 */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid #eee;
+        }
+
+        .nav-btn {
+            width: 100%;
+            background: #444;
+            color: white;
+            border: none;
+        }
+    </style>
 </head>
 <body>
+
     <h1>員工時薪管理</h1>
-    <table>
-        <thead>
-            <tr>
-                <th>姓名</th>
-                <th>時薪</th>
-                <th>操作</th>
-            </tr>
-        </thead>
-        <tbody id="employeeTable"></tbody>
-    </table>
-    <button style="margin-left: 5%;width:120px;" class="Add" onclick="window.open('index1.html', '_blank')">➡ 薪資計算</button>
-    
+
+    <div class="input-card">
+        <div class="input-group">
+            <input type="text" id="employeeName" placeholder="員工姓名">
+            <input type="number" id="employeeRate" placeholder="時薪 (例如: 190)" inputmode="numeric">
+        </div>
+        <div class="btn-group-main">
+            <button class="Add" onclick="addEmployee()">新增 / 更新</button>
+        </div>
+    </div>
+
+    <div id="employeeList"></div>
+
+    <div class="bottom-nav">
+        <button class="nav-btn" onclick="window.open('index1.html', '_blank')">➡ 前往薪資計算</button>
+    </div>
+
     <script>
         function getEmployees() {
             return JSON.parse(localStorage.getItem("employees") || "[]");
@@ -100,79 +188,80 @@
 
         function renderEmployees() {
             const employees = getEmployees();
-            const tbody = document.getElementById("employeeTable");
-            tbody.innerHTML = "";
+            const listContainer = document.getElementById("employeeList");
+            listContainer.innerHTML = "";
 
-            // 取得今天日期 (yyyy-mm-dd)
-            //const today = new Date();
-            //const yyyy = today.getFullYear();
-            //const mm = String(today.getMonth() + 1).padStart(2, '0');
-            //const dd = String(today.getDate()).padStart(2, '0');
-            //const todayStr = `${yyyy}-${mm}-${dd}`;
-            const inputRow = document.createElement("tr");
-            inputRow.innerHTML = `
-                <td><input type="text" id="employeeName" placeholder="姓名"></td>
-                <td><input type="text" id="employeeRate" placeholder="時薪"></td>
-                <td>
-                    <button class="Add" onclick="addEmployee()">新增</button>
-                    <button class="Delete" onclick="deleteEmployee()" disabled>刪除</button>
-                </td>
-            `;
-            tbody.appendChild(inputRow);
+            if (employees.length === 0) {
+                listContainer.innerHTML = `<p style="text-align:center; color:#999; margin-top:20px;">目前尚無員工資料</p>`;
+                return;
+            }
 
-            // 其他列：員工資料
             employees.forEach((emp, index) => {
-                const tr = document.createElement("tr");
-                tr.innerHTML = `
-                    <td>${emp.name}</td>
-                    <td>${emp.rate}</td>
-                    <td>
+                const card = document.createElement("div");
+                card.className = "emp-card";
+                card.innerHTML = `
+                    <div class="emp-info">
+                        <span class="emp-name">${emp.name}</span>
+                        <span class="emp-rate">$${emp.rate} / 小時</span>
+                    </div>
+                    <div class="emp-actions">
                         <button class="Edit" onclick="editEmployee(${index})">編輯</button>
                         <button class="Delete" onclick="deleteEmployee(${index})">刪除</button>
-                    </td>
+                    </div>
                 `;
-                tbody.appendChild(tr);
+                listContainer.appendChild(card);
             });
         }
 
-
         function addEmployee() {
-            const name = document.getElementById("employeeName").value.trim();
-            const rate = parseFloat(document.getElementById("employeeRate").value);
-            const date = document.getElementById("employeeDate").value;
+            const nameEl = document.getElementById("employeeName");
+            const rateEl = document.getElementById("employeeRate");
+            const name = nameEl.value.trim();
+            const rate = parseFloat(rateEl.value);
 
-            if (!name || isNaN(rate) || !date) {
-                alert("請完整輸入姓名、時薪與入職日！");
+            // 修正：原本程式碼判斷了不存在的 date 變數
+            if (!name || isNaN(rate)) {
+                alert("請輸入完整的姓名與正確的時薪數字！");
                 return;
             }
 
             let employees = getEmployees();
             const index = employees.findIndex(e => e.name === name);
+            
             if (index >= 0) {
-                // 更新
-                employees[index].rate = rate;
-                employees[index].date = date;
+                if(confirm(`員工 ${name} 已存在，是否更新時薪？`)) {
+                    employees[index].rate = rate;
+                } else { return; }
             } else {
-                employees.push({ name, rate, date });
+                employees.push({ name, rate });
             }
+
             saveEmployees(employees);
             renderEmployees();
+            
+            // 清空輸入框
+            nameEl.value = "";
+            rateEl.value = "";
         }
 
         function editEmployee(index) {
             const employees = getEmployees();
             document.getElementById("employeeName").value = employees[index].name;
             document.getElementById("employeeRate").value = employees[index].rate;
-            document.getElementById("employeeDate").value = employees[index].date || "";
+            // 捲動到頂部方便編輯
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
         function deleteEmployee(index) {
-            let employees = getEmployees();
-            employees.splice(index, 1);
-            saveEmployees(employees);
-            renderEmployees();
+            if (confirm("確定要刪除這位員工嗎？")) {
+                let employees = getEmployees();
+                employees.splice(index, 1);
+                saveEmployees(employees);
+                renderEmployees();
+            }
         }
 
+        // 初始化
         renderEmployees();
     </script>
 </body>
