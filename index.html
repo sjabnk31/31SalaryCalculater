@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>員工資料管理</title>
+    <style>
+    h1 {
+        width: fit-content;
+        margin: 0 auto;
+    }
+
+    body, table, th, td, input {
+        font-size: 16px;
+    }
+
+    table {
+        width: 90%;
+        border-collapse: collapse;
+        margin: 20px auto;
+    }
+
+    table, th, td {
+        border: 1px solid black;
+    }
+
+    th, td {
+        padding: 8px;
+        text-align: center;
+    }
+
+    /* 按鈕樣式 */
+    button {
+        width: 70px;
+        height: 40px;
+        font-size: 16px;
+        background-color: #FFF;
+        color: #000;
+        border-radius: 20px;
+        cursor: pointer;
+        font-weight: bold;
+        justify-content: center;
+        margin-left: 3px;
+        transition: 0.3s;
+    }
+
+    .Add { border: 3px solid rgb(206, 115, 224) }
+    .Edit { border: 3px solid rgb(255, 170, 0); }
+    .Delete { border: 3px solid rgb(209, 0, 0); }
+
+    /* 只有非 disabled 才有 hover 效果 */
+    .Add:not(:disabled):hover,
+    .Edit:not(:disabled):hover,
+    .Delete:not(:disabled):hover {
+        color: #FFF;
+    }
+
+    .Add:not(:disabled):hover { background-color: rgb(206, 115, 224);}
+    .Edit:not(:disabled):hover { background-color: rgb(255, 170, 0); }
+    .Delete:not(:disabled):hover { background-color: rgb(209, 0, 0); }
+
+    input {
+        width: 150px;
+        height: 30px;
+        text-align: center;
+    }
+
+    /* disabled 樣式 */
+    button:disabled {
+        background-color: #e0e0e0;  
+        color: #000000;          
+        border: 3px solid #4d4d4d;
+        cursor: not-allowed;       
+        opacity: 0.6;
+    }
+</style>
+
+</head>
+<body>
+    <h1>員工時薪管理</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>姓名</th>
+                <th>時薪</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody id="employeeTable"></tbody>
+    </table>
+    <button style="margin-left: 5%;width:120px;" class="Add" onclick="window.open('index1.html', '_blank')">➡ 薪資計算</button>
+    
+    <script>
+        function getEmployees() {
+            return JSON.parse(localStorage.getItem("employees") || "[]");
+        }
+
+        function saveEmployees(employees) {
+            localStorage.setItem("employees", JSON.stringify(employees));
+        }
+
+        function renderEmployees() {
+            const employees = getEmployees();
+            const tbody = document.getElementById("employeeTable");
+            tbody.innerHTML = "";
+
+            // 取得今天日期 (yyyy-mm-dd)
+            //const today = new Date();
+            //const yyyy = today.getFullYear();
+            //const mm = String(today.getMonth() + 1).padStart(2, '0');
+            //const dd = String(today.getDate()).padStart(2, '0');
+            //const todayStr = `${yyyy}-${mm}-${dd}`;
+            const inputRow = document.createElement("tr");
+            inputRow.innerHTML = `
+                <td><input type="text" id="employeeName" placeholder="姓名"></td>
+                <td><input type="text" id="employeeRate" placeholder="時薪"></td>
+                <td>
+                    <button class="Add" onclick="addEmployee()">新增</button>
+                    <button class="Delete" onclick="deleteEmployee()" disabled>刪除</button>
+                </td>
+            `;
+            tbody.appendChild(inputRow);
+
+            // 其他列：員工資料
+            employees.forEach((emp, index) => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${emp.name}</td>
+                    <td>${emp.rate}</td>
+                    <td>
+                        <button class="Edit" onclick="editEmployee(${index})">編輯</button>
+                        <button class="Delete" onclick="deleteEmployee(${index})">刪除</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+
+        function addEmployee() {
+            const name = document.getElementById("employeeName").value.trim();
+            const rate = parseFloat(document.getElementById("employeeRate").value);
+            const date = document.getElementById("employeeDate").value;
+
+            if (!name || isNaN(rate) || !date) {
+                alert("請完整輸入姓名、時薪與入職日！");
+                return;
+            }
+
+            let employees = getEmployees();
+            const index = employees.findIndex(e => e.name === name);
+            if (index >= 0) {
+                // 更新
+                employees[index].rate = rate;
+                employees[index].date = date;
+            } else {
+                employees.push({ name, rate, date });
+            }
+            saveEmployees(employees);
+            renderEmployees();
+        }
+
+        function editEmployee(index) {
+            const employees = getEmployees();
+            document.getElementById("employeeName").value = employees[index].name;
+            document.getElementById("employeeRate").value = employees[index].rate;
+            document.getElementById("employeeDate").value = employees[index].date || "";
+        }
+
+        function deleteEmployee(index) {
+            let employees = getEmployees();
+            employees.splice(index, 1);
+            saveEmployees(employees);
+            renderEmployees();
+        }
+
+        renderEmployees();
+    </script>
+</body>
+</html>

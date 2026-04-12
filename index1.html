@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>31薪資明細</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <style>
+        h1 { width: fit-content; margin: 0 auto; }
+        body, table, th, td, select { font-size: 16px; }
+        select { width: auto; height: auto; }
+        table { width: 99%; border-collapse: collapse; margin-top: 10px; }
+        table, th, td { border: 1px solid black; }
+        th, td { padding: 8px; text-align: center; }
+        td:nth-child(5) { text-align: center; }
+        .control-panel { background: #f0f0f0; padding: 15px; border-radius: 10px; margin-bottom: 20px; line-height: 1.8; }
+        button {
+            height: 30px; font-size: 16px; background-color: #FFF;
+            color: #000; border-radius: 20px; cursor: pointer; font-weight: bold;
+            margin: 5px 3px; transition: 0.3s; padding: 0 15px;
+        }
+        .save { border: 3px solid rgb(206, 115, 224); }
+        .clear { border: 3px solid rgb(209, 0, 0); }
+        .ocr-btn { border: 3px solid #28a745; background-color: #FFF; } 
+        .back-btn { border: 3px solid #190b99; }
+        .save:hover { background-color: rgb(206, 115, 224); color: #FFF; }
+        .clear:hover { background-color: rgb(209, 0, 0); color: #FFF; }
+        .ocr-btn:hover { background-color: #28a745; color: #FFF; }
+        tfoot tr td { background-color: #f9f9f9; font-weight: bold; }
+        .final-row { background-color: #e6f3ff !important; font-size: 16px; }
+        .total-text { color: red; }
+        #ocrStatus { font-weight: bold; font-size: 16px; color: #28a745; }
+
+        /* --- 影印專用樣式修正 --- */
+        @media print {
+            button, #printDisappear, .ocr-section { display: none !important; }
+            table { width: 100%; }
+            
+            /* 1. 先把 tbody 裡的所有列隱藏 */
+            #workDates tr { display: none; }
+            
+            /* 2. 只有當該列具有 'has-data' 這個 class 時才顯示 */
+            #workDates tr.has-data { display: table-row; }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="printDisappear" class="control-panel">
+       <div style="text-align: center;">
+            <span style="font-size: 18px; font-weight: bold;">薪資明細表</span>
+        </div>
+        員工：<select id="employeeSelect" onchange="loadData(); calculate();"></select><br>
+        <select id="selectyear" onchange="generateDates(); loadData(); calculate();"></select> 年
+        <select id="selectmonth" onchange="generateDates(); loadData(); calculate();"></select> 月<br>
+        時薪：<span id="employeeRateDisplay">0</span> 元<br>
+        實領：<span id="headerFinalSalary" style="color: blue; font-weight: bold;">0</span><br>
+        <div class="ocr-section">
+            <strong>上傳：</strong>
+            <input type="file" id="uploadOCR" accept="image/*" style="display:none;">
+            <button class="ocr-btn" onclick="document.getElementById('uploadOCR').click()">選擇圖片/檔案</button><br>
+            <span id="ocrStatus">等待上傳...</span><br>
+            <button class="save" onclick="window.print()">存檔</button>
+            <button class="clear" onclick="clearTable()">清除</button>
+            <button class="back-btn" onclick="window.open('31.html', '_blank')">員工資料</button>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="width: auto;">日期</th>
+                <th style="width: auto;">星期</th>
+                <th style="width: auto;">本日工時</th>
+                <th style="width: auto;">薪資明細</th>
+                <th style="width: auto;">備註</th>
+            </tr>
+        </thead>
+
+        <tbody id="workDates"></tbody>
+
+        <tfoot>
+            <tr>
+                <td colspan="3" style="text-align: right;">應領金額：</td>
+                <td colspan="2" id="footerTotalSalary" class="total-text">0 元</td>
+            </tr>
+
+            <tr>
+                <td colspan="3" style="text-align: right;">扣勞健保：</td>
+                <td colspan="2" style="color: #cc0000;">-958 元</td>
+            </tr>
+
+            <tr class="final-row">
+                <td colspan="3" style="text-align: right;">實領金額：</td>
+                <td colspan="2" id="footerFinalSalary" style="color: blue;">0 元</td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <script>
+        const LABOR_FEE = 500;
+        const HEALTH_FEE = 458;
+        let tempTimeRecords = {};
+        function getEmployees() { return JSON.parse(localStorage.getItem("employees") || "[]"); }
+
+        document.getElementById('uploadOCR').addEventListener('change', async function(e) {
+            const files = e.target.files;
+            if (!files.length) return;
+            const status = document.getElementById('ocrStatus');
+            const currentMonth = document.getElementById('selectmonth').value;
+            let totalFoundCount = 0;
+            status.style.color = "#424442"; 
+
+            for (let i = 0; i < files.length; i++) {
+                status.innerText = `正在辨識第 (${i + 1}/${files.length}) 張...`;
+                try {
+                    const { data: { text } } = await Tesseract.recognize(files[i], 'eng');
+                    if (parseOCRData(text)) totalFoundCount++;
+                } catch (err) {
+                    console.error("辨識出錯", err);
+                }
+            }
+
+            if (totalFoundCount > 0) {
+                status.innerText = `擷取成功！已更新 ${currentMonth} 月資料`;
+                status.style.color = "#28a745";
+                calculate();
+            } else {
+                status.innerText = "請選擇其他照片（未偵測到符合的日期格式）";
+                status.style.color = "red";
+            }
+            this.value = "";
+        });
+
+        function parseOCRData(text) {
+            const currentMonth = document.getElementById('selectmonth').value.padStart(2, '0');
+            const lines = text.split('\n');
+            let foundValidDate = false;
+            lines.forEach(line => {
+                const match = line.match(/(\d{4})[-\/](\d{2})[-\/](\d{2})\s+(\d{2})[:：\s](\d{2})/);
+                if (match) {
+                    const [_, year, month, day, hour, min] = match;
+                    if (month === currentMonth) {
+                        const d = parseInt(day, 10);
+                        const hhmm = hour + min;
+                        if (!tempTimeRecords[d]) tempTimeRecords[d] = { s: "", e: "" };
+                        if (line.includes('下') || (tempTimeRecords[d].s !== "" && tempTimeRecords[d].s !== hhmm)) {
+                            tempTimeRecords[d].e = hhmm;
+                        } else {
+                            tempTimeRecords[d].s = hhmm;
+                        }
+                        foundValidDate = true; 
+                    }
+                }
+            });
+            return foundValidDate;
+        }
+
+        function initYearMonth() {
+            const yearSel = document.getElementById('selectyear'), monthSel = document.getElementById('selectmonth');
+            const now = new Date();
+            for (let i = now.getFullYear() - 1; i <= now.getFullYear() + 1; i++) {
+                yearSel.add(new Option(i, i, i === now.getFullYear(), i === now.getFullYear()));
+            }
+            for (let i = 1; i <= 12; i++) {
+                monthSel.add(new Option(i, i, i === (now.getMonth() + 1), i === (now.getMonth() + 1)));
+            }
+        }
+
+        function generateDates() {
+            const year = document.getElementById('selectyear').value;
+            const month = document.getElementById('selectmonth').value;
+            const days = new Date(year, month, 0).getDate();
+            const weeks = ['日', '一', '二', '三', '四', '五', '六'];
+            const tbody = document.getElementById('workDates');
+            tbody.innerHTML = '';
+            tempTimeRecords = {}; 
+            const status = document.getElementById('ocrStatus');
+            if (status) {
+                status.innerText = "等待上傳...";
+                status.style.color = "#424442";
+            }
+            for (let d = 1; d <= days; d++) {
+                const dateObj = new Date(year, month - 1, d);
+                const row = document.createElement('tr');
+                row.id = `row-${d}`; // 給每一列一個 ID 方便操作
+                row.innerHTML = `
+                    <td>${month}/${d.toString().padStart(2, '0')}</td>
+                    <td>${weeks[dateObj.getDay()]}</td>
+                    <td><span id="Hours-${d}">-</span></td>
+                    <td><span id="Detail-${d}">-</span></td>
+                    <td><span id="Note-${d}"></span></td>
+                `;
+                tbody.appendChild(row);
+            }
+        }
+
+        function calculate() {
+            const empIdx = document.getElementById("employeeSelect").value;
+            const employees = getEmployees();
+            if (empIdx === "" || !employees[empIdx]) return;
+            const rate = employees[empIdx].rate;
+            document.getElementById("employeeRateDisplay").innerText = rate;
+            let totalSalary = 0;
+
+            // 先移除所有列的 'has-data' 標記
+            document.querySelectorAll('#workDates tr').forEach(tr => tr.classList.remove('has-data'));
+
+            Object.keys(tempTimeRecords).forEach(d => {
+                const record = tempTimeRecords[d];
+                const s = parseTime(record.s), e = parseTime(record.e);
+                const hSpan = document.getElementById(`Hours-${d}`);
+                const dSpan = document.getElementById(`Detail-${d}`);
+                const nSpan = document.getElementById(`Note-${d}`);
+                const row = document.getElementById(`row-${d}`);
+
+                if (s && e) {
+                    let rS = Math.ceil(s.total / 30) * 30;
+                    let rE = Math.floor(e.total / 30) * 30;
+                    let diff = rE - rS;
+                    if (diff < 0) diff += 1440;
+                    let hrs = diff / 60;
+                    let finalHrs = hrs;
+                    let note = "";
+                    if (hrs > 8) { finalHrs = hrs - 1; note = "扣1h"; }
+                    else if (hrs > 4) { finalHrs = hrs - 0.5; note = "扣0.5h"; }
+                    const pay = Math.floor(finalHrs * rate);
+                    hSpan.innerText = `${finalHrs} 小時`;
+                    dSpan.innerText = `${finalHrs}h × ${rate} = ${pay}元`;
+                    nSpan.innerText = note;
+                    totalSalary += pay;
+
+                    // 有計算出工時，幫這一列加上 class，影印時才會顯示
+                    if (row) row.classList.add('has-data');
+                }
+            });
+
+            const final = totalSalary - LABOR_FEE - HEALTH_FEE;
+            document.getElementById("footerTotalSalary").innerText = totalSalary + " 元";
+            document.getElementById("footerFinalSalary").innerText = final + " 元";
+            document.getElementById("headerFinalSalary").innerText = final + " 元";
+            saveToBrowser();
+        }
+
+        function parseTime(str) {
+            if (!/^\d{4}$/.test(str)) return null;
+            const h = parseInt(str.substring(0, 2)), m = parseInt(str.substring(2, 4));
+            return { total: h * 60 + m };
+        }
+
+        function saveToBrowser() {
+            const empIdx = document.getElementById("employeeSelect").value;
+            const year = document.getElementById("selectyear").value;
+            const month = document.getElementById("selectmonth").value;
+            if (empIdx !== "") localStorage.setItem(`salaryData_${empIdx}_${year}_${month}`, JSON.stringify(tempTimeRecords));
+        }
+
+        function loadData() {
+            const empIdx = document.getElementById("employeeSelect").value;
+            const year = document.getElementById("selectyear").value;
+            const month = document.getElementById("selectmonth").value;
+            const saved = JSON.parse(localStorage.getItem(`salaryData_${empIdx}_${year}_${month}`));
+            if (saved) {
+                tempTimeRecords = saved;
+                calculate();
+            }
+        }
+
+        function renderEmployeeSelect() {
+            const emps = getEmployees(), sel = document.getElementById("employeeSelect");
+            sel.innerHTML = '<option value="">請選擇員工</option>';
+            emps.forEach((e, i) => sel.add(new Option(e.name, i)));
+        }
+
+        function clearTable() {
+            if (confirm("確定要清除本月所有辨識紀錄嗎？")) {
+                tempTimeRecords = {};
+                generateDates();
+                calculate();
+                document.getElementById('ocrStatus').innerText = "已清除";
+            }
+        }
+
+        window.onload = () => { initYearMonth(); generateDates(); renderEmployeeSelect(); };
+    </script>
+</body>
+</html>
