@@ -3,266 +3,824 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>員工資料管理</title>
+    <title>31打卡</title>
+    <link rel="apple-touch-icon" href="31icon.jpg">
+    <link rel="apple-touch-icon" sizes="152x152" href="31icon.jpg">
+    <link rel="apple-touch-icon" sizes="180x180" href="31icon.jpg">
+
+    <link rel="icon" type="image/jpeg" sizes="192x192" href="31icon.jpg">
+    <link rel="shortcut icon" type="image/jpeg" href="31icon.jpg">
+    
+    <script>
+        window.addEventListener('unhandledrejection', function (event) {
+            if (event.reason && (event.reason.message || '').includes('message port closed')) {
+                event.preventDefault();
+            }
+        });
+
+        window.onerror = function(msg, url, line, col, error) {
+            const errorStr = String(msg).toLowerCase();
+            if (
+                errorStr.includes("lasterror") || 
+                errorStr.includes("extension") || 
+                errorStr.includes("unload") || 
+                errorStr.includes("unsafe attempt") || 
+                errorStr.includes("unique security origins")
+            ) {
+                return true; 
+            }
+            return false;
+        };
+    </script>
+
+    <link rel="icon" href="data:;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==">
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    
     <style>
+        /* 🎨 核心色彩面板 */
         :root {
-            --primary: #ce73e4;
-            --warning: #e28801;
-            --danger: #d10000;
-            --bg-gray: #f8f9fa;
+            --primary: #4a2cb0;        
+            --primary-light: #f1ebff;  
+            --success: #0d735c;        
+            --blue-accent: #2e4ca1;    
+            --warning: #b83253;        
+            --danger: #8a123f;         
+            --accent: #7653d1;         
+            --bg: #fcfaf6;             
+            --text-main: #261a36;      
+            --text-sub: #544766;       
+        }
+
+        *, *::before, *::after {
+            box-sizing: border-box;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background-color: var(--bg-gray);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
             margin: 0;
-            padding: 15px;
-            color: #333;
+            padding: 0;
+            color: var(--text-main);
         }
 
-        h1 {
-            text-align: center;
-            font-size: 1.5rem;
-            margin-bottom: 20px;
-            color: #222;
+        [id^="immersive-translate"], .immersive-translate-popup {
+            display: none !important;
         }
 
-        /* 輸入區域卡片化 */
-        .input-card {
+        /* 固定頂部控制面板 */
+        .control-panel {
+            position: sticky;
+            top: 0;
+            z-index: 100;
             background: white;
             padding: 15px;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(74, 44, 176, 0.06);
+            border-bottom: 3px solid var(--accent);
         }
 
-        .input-group {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
+        .header-title {
+            text-align: center;
+            font-size: 1.25rem;
+            font-weight: bold;
+            color: var(--primary);
+            margin-bottom: 10px;
+            display: block;
+            letter-spacing: 1px;
         }
 
-        input {
-            width: 100%;
-            height: 45px; /* 加大高度方便輸入 */
-            box-sizing: border-box;
-            border: 1px solid #ccc;
+        .info-grid {
+            display: block;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .employee-name-display {
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--text-main);
+            float: left;
+            line-height: 40px;
+        }
+
+        .select-group {
+            float: right;
+            display: block;
+        }
+
+        select {
+            width: 80px;
+            height: 40px;
+            border: 1.5px solid #c9bed3;
             border-radius: 8px;
-            padding: 0 12px;
-            font-size: 16px; /* 防止 iOS 自動縮放 */
+            font-size: 16px;
+            margin-left: 4px;
+            color: var(--text-main);
+            font-weight: bold;
+            background-color: #faf9f6;
+        }
+        select:focus {
+            outline: none;
+            border-color: var(--accent);
         }
 
-        .btn-group-main {
-            display: flex;
-            gap: 10px;
-            margin-top: 10px;
+        /* 頂部應領實領區塊 */
+        .salary-summary {
+            background: var(--primary-light);
+            padding: 10px 14px;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 10px;
+            display: block;
+            border: 1px solid #dfd3f8;
         }
+        .summary-left { float: left; line-height: 28px; font-size: 15px; font-weight: bold; color: var(--text-main); }
+        .summary-right { float: right; line-height: 28px; font-size: 15px; font-weight: bold; color: var(--text-main); }
+        .summary-right b { color: var(--primary); font-size: 1.3rem; font-weight: bold; }
 
-        /* 按鈕通用樣式 */
+        .btn-group { display: block; overflow: hidden; }
+
         button {
-            flex: 1;
-            height: 48px;
-            border-radius: 24px;
+            float: left;
+            width: 23%;
+            margin-right: 2%;
+            height: 44px;
+            border-radius: 22px;
+            font-weight: bold;
+            border: 2px solid;
+            background: white;
+            cursor: pointer;
+            font-size: 13px;
+            transition: 0.2s;
+            padding: 0;
+        }
+        button:last-child { margin-right: 0; width: 24%; }
+
+        /* 🔄 手機打卡切換按鈕樣式 */
+        .punch-btn { transition: all 0.2s ease; }
+        .punch-btn.duty-in { border-color: var(--blue-accent); color: var(--blue-accent); background: #f0f3fc; }
+        .punch-btn.duty-out { border-color: var(--warning); color: var(--warning); background: #fff4f6; }
+
+        .ocr-btn { border-color: var(--success); color: var(--success); background: #effaf7; }
+        .save { border-color: var(--accent); color: var(--accent); background: #f8f5ff; }
+        .clear { border-color: var(--danger); color: var(--danger); background: #fff2f5; }
+
+        button:active { opacity: 0.6; transform: scale(0.95); }
+
+        /* 內容區塊 */
+        .data-container { padding: 10px; margin-bottom: 20px; }
+
+        #noDataHint {
+            text-align: center;
+            color: var(--text-sub);
+            font-weight: bold;
+            padding: 60px 20px;
+            background: white;
+            border-radius: 12px;
+            border: 2px dashed #c0b3ce;
+            margin-top: 20px;
+        }
+
+        table { width: 100%; border-collapse: collapse; }
+        thead { display: none; }
+        
+        .print-only-header { display: none; }
+
+        #workDates { display: block; padding: 0; margin: 0; }
+
+        /* 手機螢幕雙欄卡片 */
+        #workDates tr {
+            display: block;
+            background: white;
+            margin-bottom: 10px;
+            padding: 12px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(74, 44, 176, 0.04);
+            border-left: 5px solid var(--accent);
+            width: 49%;
+            float: left;
+            min-height: 175px;
+        }
+
+        #workDates tr:nth-child(even) { float: right; }
+        .clearfix::after { content: ""; clear: both; display: table; }
+
+        #workDates tr.abnormal-row {
+            border-left: 5px solid var(--warning);
+            background: #fff4f6;
+        }
+
+        #workDates td {
+            display: block;
+            text-align: left;
+            padding: 2px 0;
+            border: none;
+            font-size: 13px;
+            color: var(--text-main);
+        }
+
+        .date-title-box {
+            border-bottom: 1px solid #f0eaf7;
+            padding-bottom: 4px;
+            margin-bottom: 6px;
+            overflow: hidden;
+        }
+        .date-text { font-weight: bold; font-size: 1.05rem; float: left; color: var(--primary); }
+        .week-text { color: var(--text-sub); font-size: 0.9rem; float: left; margin-left: 6px; margin-top: 2px; font-weight: bold; }
+
+        #workDates td.info-line:before { content: attr(data-label); color: var(--text-sub); font-weight: 500; }
+        
+        .note-box {
+            margin-top: 4px;
+            padding-top: 4px;
+            border-top: 1px dashed #dfd4eb;
+            font-size: 12px;
+            line-height: 1.4;
+            color: var(--text-main);
+        }
+
+        /* 尾端總計區 */
+        .salary-total-block {
+            display: block;
+            margin-top: 20px;
+            padding: 18px 14px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(74, 44, 176, 0.04);
+            clear: both;
+            border: 1px solid #ebdffd;
+        }
+        .tfoot-row { 
+            display: block; 
+            overflow: hidden; 
+            padding: 8px 0; 
+            font-size: 16px;
+            border-bottom: 1px solid #fdfbf9;
+        }
+        .tfoot-row:last-child { border-bottom: none; padding-top: 12px; }
+        .tfoot-left { float: left; font-weight: bold; color: var(--text-main); }
+        .tfoot-right { float: right; font-weight: bold; }
+        .total-pay-text { color: var(--success); }
+        .insurance-text { color: var(--warning); }
+        .final-pay-text { color: var(--primary); font-size: 1.35rem; }
+
+        /* ⏳ 智慧型轉圈圈與打勾勾動畫遮罩 */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(252, 250, 246, 0.96); 
+            z-index: 9999;
+            display: none; 
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 0.4s ease;
+            opacity: 1;
+        }
+
+        .animation-container {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .svg-spinner {
+            width: 100%;
+            height: 100%;
+            animation: rotate-loading 2s linear infinite;
+            transform-origin: center center;
+            transition: all 0.3s ease;
+        }
+
+        .svg-spinner circle {
+            stroke-dasharray: 1, 200;
+            stroke-dashoffset: 0;
+            animation: dash-loading 1.5s ease-in-out infinite;
+            stroke-linecap: round;
+            stroke: var(--primary); 
+            transition: stroke 0.3s ease;
+        }
+
+        .svg-checkmark-path {
+            stroke-dasharray: 50;
+            stroke-dashoffset: 50;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            stroke: #0d735c; 
+            fill: none;
+        }
+
+        .animation-container.success .svg-spinner {
+            animation: none;
+        }
+        .animation-container.success .svg-spinner circle {
+            animation: none;
+            stroke-dasharray: 160;
+            stroke-dashoffset: 0;
+            stroke: #0d735c;
+        }
+        .animation-container.success .svg-checkmark-path {
+            animation: draw-check 0.4s ease-in-out forwards 0.2s; 
+        }
+
+        .loading-text {
             font-size: 16px;
             font-weight: bold;
-            cursor: pointer;
-            border: 3px solid transparent;
-            transition: 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            color: var(--text-main);
+            letter-spacing: 1px;
+            text-align: center;
+            max-width: 80%;
+            line-height: 1.5;
+            transition: color 0.3s ease;
+        }
+        .loading-overlay.success-text .loading-text {
+            color: #0d735c; 
         }
 
-        .Add { border-color: var(--primary); background: white; color: var(--primary); }
-        .Edit { border-color: var(--warning); background: white; color: var(--warning); }
-        .Delete { border-color: var(--danger); background: white; color: var(--danger); }
-
-        /* 按鈕點擊效果 */
-        button:active {
-            opacity: 0.7;
-            transform: scale(0.98);
+        @keyframes rotate-loading { 100% { transform: rotate(360deg); } }
+        @keyframes dash-loading {
+            0% { stroke-dasharray: 1, 200; stroke-dashoffset: 0; }
+            50% { stroke-dasharray: 89, 200; stroke-dashoffset: -35; }
+            100% { stroke-dasharray: 89, 200; stroke-dashoffset: -124; }
         }
+        @keyframes draw-check { 100% { stroke-dashoffset: 0; } }
 
-        .Add:not(:disabled):active { background-color: var(--primary); color: white; }
-        .Edit:not(:disabled):active { background-color: var(--warning); color: white; }
-        .Delete:not(:disabled):active { background-color: var(--danger); color: white; }
-
-        button:disabled {
-            border-color: #ccc;
-            color: #999;
-            cursor: not-allowed;
-        }
-
-        /* 列表轉為卡片 */
-        #employeeList {
-            margin-bottom: 80px; /* 留空間給底部按鈕 */
-        }
-
-        .emp-card {
-            background: white;
-            padding: 15px;
-            border-radius: 12px;
-            margin-bottom: 12px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .emp-info {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .emp-name {
-            font-weight: bold;
-            font-size: 1.1rem;
-        }
-
-        .emp-rate {
-            color: #666;
-            font-size: 0.9rem;
-            margin-top: 4px;
-        }
-
-        .emp-actions {
-            display: flex;
-            gap: 8px;
-        }
-
-        .emp-actions button {
-            width: 60px;
-            height: 36px;
-            font-size: 14px;
-            border-width: 2px;
-        }
-
-        /* 底部固定導航 */
-        .bottom-nav {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            padding: 15px;
-            background: rgba(255, 255, 255, 0.9);
-            backdrop-filter: blur(10px);
-            border-top: 1px solid #eee;
-        }
-
-        .nav-btn {
-            width: 100%;
-            background: #ce73e4;
-            color: white;
-            border: none;
+        @media print {
+            @page { size: A4 portrait; margin: 10mm 8mm; }
+            .control-panel, button, #noDataHint, .loading-overlay { display: none !important; }
+            body { background: white; color: #000; padding: 0; margin: 0; font-size: 10pt; }
+            .data-container { padding: 0; margin: 0; }
+            .print-only-header { display: block !important; width: 100%; margin-bottom: 12px; border-bottom: 2px solid #000; padding-bottom: 6px; }
+            .print-title { text-align: center; font-size: 16pt; font-weight: bold; margin-bottom: 6px; letter-spacing: 2px; }
+            .print-meta-grid { width: 100%; display: table; }
+            .print-meta-cell { display: table-cell; font-size: 11pt; font-weight: bold; }
+            table { display: table !important; width: 100% !important; border-collapse: collapse !important; table-layout: fixed !important; }
+            thead { display: table-header-group !important; }
+            th.print-th-date { width: 35% !important; }
+            th.print-th-hours { width: 30% !important; }
+            th.print-th-pay { width: 35% !important; }
+            th.print-th-note { display: none !important; }
+            thead th { border: 1px solid #000 !important; background-color: #f2f2f2 !important; padding: 6px 4px !important; font-size: 10pt !important; font-weight: bold !important; text-align: center !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            #workDates { display: table-row-group !important; }
+            #workDates tr { display: table-row !important; background: none !important; width: auto !important; float: none !important; box-shadow: none !important; border: none !important; }
+            #workDates tr.abnormal-row { background-color: #fffdfa !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            #workDates td { display: table-cell !important; border: 1px solid #666 !important; text-align: center !important; padding: 4px 2px !important; font-size: 9.5pt !important; vertical-align: middle !important; color: #000 !important; }
+            #workDates td.print-td-note { display: none !important; }
+            #workDates td.info-line:before { content: "" !important; }
+            .date-title-box { border: none !important; padding: 0 !important; margin: 0 !important; text-align: center; }
+            .date-text { float: none !important; display: inline !important; font-weight: bold; color: #000 !important; }
+            .week-text { float: none !important; display: inline !important; margin-left: 4px !important; color: #000 !important; }
+            .salary-total-block { display: block !important; background: white !important; border: 1px solid #666 !important; box-shadow: none !important; margin-top: 15px !important; padding: 12px 14px !important; page-break-inside: avoid !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .tfoot-row { border-bottom: 1px solid #ddd !important; }
+            .tfoot-row:last-child { border-bottom: none !important; }
         }
     </style>
 </head>
+
 <body>
-
-    <h1>員工時薪管理</h1>
-
-    <div class="input-card">
-        <div class="input-group">
-            <input type="text" id="employeeName" placeholder="員工姓名">
-            <input type="number" id="employeeRate" placeholder="時薪 (例如: 190)" inputmode="numeric">
+    <div id="loadingOverlay" class="loading-overlay">
+        <div id="animationContainer" class="animation-container">
+            <svg class="svg-spinner" viewBox="25 25 50 50">
+                <circle cx="50" cy="50" r="20" fill="none" stroke-width="4" stroke-miterlimit="10"/>
+            </svg>
+            <svg style="position:absolute; top:0; left:0; width:100%; height:100%;" viewBox="0 0 52 52">
+                <path class="svg-checkmark-path" stroke-width="4" d="M14 27l7.5 7.5L38 18"/>
+            </svg>
         </div>
-        <div class="btn-group-main">
-            <button class="Add" onclick="addEmployee()">新增 / 更新</button>
+        <div id="loadingText" class="loading-text">資料讀取中...</div>
+    </div>
+
+    <div class="print-only-header">
+        <div class="print-title">薪資明細報表</div>
+        <div class="print-meta-grid">
+            <div class="print-meta-cell" style="text-align: left;">員工姓名：31</div>
+            <div class="print-meta-cell" style="text-align: right;"><span id="printYearStr">2026</span>年 <span id="printMonthStr">6</span>月 份</div>
         </div>
     </div>
 
-    <div id="employeeList"></div>
+    <div class="control-panel">
+        <span class="header-title">薪資明細表</span>
+        <div class="info-grid">
+            <div class="employee-name-display">員工：<span id="fixedEmployeeName"></span></div>
+            <div class="select-group">
+                <select id="selectyear" onchange="loadData()"></select>
+                <select id="selectmonth" onchange="loadData()"></select>
+            </div>
+        </div>
+        <div class="salary-summary">
+            <div class="summary-left">應領：<span id="headerTotalSalary">0</span> 元</div>
+            <div class="summary-right">實領：<b id="headerFinalSalary">0</b> 元</div>
+        </div>
+        <div class="btn-group">
+            <button id="togglePunchBtn" class="punch-btn duty-in" onclick="handleSmartPunch()">上班</button>
+            <input type="file" id="uploadOCR" accept="image/*" style="display:none;" multiple>
+            <button class="ocr-btn" onclick="document.getElementById('uploadOCR').click()">上傳</button>
+            <button class="save" onclick="window.print()">存檔</button>
+            <button class="clear" onclick="clearTable()">清除</button>
+        </div>
+    </div>
 
-    <div class="bottom-nav">
-        <button class="nav-btn" onclick="window.open('index1.html', '_blank')">➡ 前往薪資計算</button>
+    <div class="data-container">
+        <div id="noDataContainer"></div>
+        <table>
+            <thead>
+                <tr>
+                    <th class="print-th-date">日期資訊</th>
+                    <th class="print-th-hours">計薪工時</th>
+                    <th class="print-th-pay">當日明細</th>
+                    <th class="print-th-note">比對備註</th>
+                </tr>
+            </thead>
+            <tbody id="workDates" class="clearfix"></tbody>
+        </table>
+
+        <div id="salaryTotalBlock" class="salary-total-block" style="display:none;">
+            <div class="tfoot-row">
+                <div class="tfoot-left">應領金額：</div>
+                <div id="footerTotalSalary" class="tfoot-right total-pay-text">0 元</div>
+            </div>
+            <div class="tfoot-row">
+                <div class="tfoot-left">扣勞健保：</div>
+                <div class="tfoot-right insurance-text">-958 元</div>
+            </div>
+            <div class="tfoot-row">
+                <div class="tfoot-left" style="line-height: 30px;">實領金額：</div>
+                <div id="footerFinalSalary" class="tfoot-right final-pay-text">0 元</div>
+            </div>
+        </div>
     </div>
 
     <script>
-        function getEmployees() {
-            return JSON.parse(localStorage.getItem("employees") || "[]");
+    const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyP7UTf2aaJl9YBGv4Iw8D_cyVgFOZ85BXOD0zrMCSQUG9mZwHXtWWPsl-LS0B_qRBu/exec";
+    const FIXED_EMPLOYEE = { name: "31", rate: 200 };
+    const LABOR_FEE = 500;
+    const HEALTH_FEE = 458;
+    let tempTimeRecords = {};
+
+    function showLoading(text) {
+        const overlay = document.getElementById("loadingOverlay");
+        const container = document.getElementById("animationContainer");
+        overlay.classList.remove("success-text");
+        container.classList.remove("success");
+        overlay.style.opacity = "1";
+        document.getElementById("loadingText").innerText = text;
+        overlay.style.display = "flex";
+    }
+
+    function hideLoadingWithSuccess(successText) {
+        const overlay = document.getElementById("loadingOverlay");
+        const container = document.getElementById("animationContainer");
+        document.getElementById("loadingText").innerText = successText;
+        container.classList.add("success");
+        overlay.classList.add("success-text");
+
+        setTimeout(() => {
+            overlay.style.opacity = "0";
+            setTimeout(() => { overlay.style.display = "none"; }, 400);
+        }, 900);
+    }
+
+    function forceHideLoading() {
+        document.getElementById("loadingOverlay").style.opacity = "0";
+        setTimeout(() => { document.getElementById("loadingOverlay").style.display = "none"; }, 400);
+    }
+
+    function initYearMonth() {
+        const yearSel = document.getElementById('selectyear'), monthSel = document.getElementById('selectmonth');
+        const now = new Date();
+        yearSel.innerHTML = ""; monthSel.innerHTML = "";
+        for (let i = now.getFullYear() - 1; i <= now.getFullYear() + 1; i++) {
+            yearSel.add(new Option(i + "年", i, i === now.getFullYear(), i === now.getFullYear()));
+        }
+        for (let i = 1; i <= 12; i++) {
+            monthSel.add(new Option(i + "月", i, i === (now.getMonth() + 1), i === (now.getMonth() + 1)));
+        }
+    }
+
+    function displayFixedEmployeeInfo() {
+        document.getElementById("fixedEmployeeName").innerText = FIXED_EMPLOYEE.name;
+    }
+
+    // ⚡【修正點 1】重寫狀態更新邏輯：直接讀取現行有效的快取資料，精準控制按鈕
+    function updatePunchButtonState() {
+        const btn = document.getElementById("togglePunchBtn");
+        const now = new Date();
+        const currentDay = now.getDate();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1;
+
+        const selectedYear = parseInt(document.getElementById('selectyear').value);
+        const selectedMonth = parseInt(document.getElementById('selectmonth').value);
+
+        // 如果目前切換查看的不是當下真實月份，按鈕固定顯示「手機上班」
+        if (selectedYear !== currentYear || selectedMonth !== currentMonth) {
+            btn.innerText = "上班";
+            btn.className = "punch-btn duty-in";
+            return;
         }
 
-        function saveEmployees(employees) {
-            localStorage.setItem("employees", JSON.stringify(employees));
+        const todayRecord = tempTimeRecords[currentDay];
+        
+        // 精準條件：只要今天有紀錄，且「上班卡(s)」非空字串，就切換成「手機下班」
+        if (todayRecord && todayRecord.s && todayRecord.s !== "") {
+            btn.innerText = "下班";
+            btn.className = "punch-btn duty-out";
+        } else {
+            btn.innerText = "上班";
+            btn.className = "punch-btn duty-in";
         }
+    }
 
-        function renderEmployees() {
-            const employees = getEmployees();
-            const listContainer = document.getElementById("employeeList");
-            listContainer.innerHTML = "";
+    // ⚡【修正點 2】智慧打卡：點擊瞬間先立刻翻轉文字，避免網路延遲造成按鈕卡住
+    async function handleSmartPunch() {
+        const btn = document.getElementById("togglePunchBtn");
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1;
+        const currentDay = now.getDate();
+        
+        const hh = now.getHours().toString().padStart(2, '0');
+        const mm = now.getMinutes().toString().padStart(2, '0');
+        const currentTimeString = hh + mm;
 
-            if (employees.length === 0) {
-                listContainer.innerHTML = `<p style="text-align:center; color:#999; margin-top:20px;">目前尚無員工資料</p>`;
-                return;
-            }
+        // 打卡時，自動拉回今天的年份月份
+        document.getElementById('selectyear').value = currentYear;
+        document.getElementById('selectmonth').value = currentMonth;
 
-            employees.forEach((emp, index) => {
-                const card = document.createElement("div");
-                card.className = "emp-card";
-                card.innerHTML = `
-                    <div class="emp-info">
-                        <span class="emp-name">${emp.name}</span>
-                        <span class="emp-rate">$${emp.rate} / 小時</span>
-                    </div>
-                    <div class="emp-actions">
-                        <button class="Edit" onclick="editEmployee(${index})">編輯</button>
-                        <button class="Delete" onclick="deleteEmployee(${index})">刪除</button>
-                    </div>
-                `;
-                listContainer.appendChild(card);
-            });
-        }
-
-        function addEmployee() {
-            const nameEl = document.getElementById("employeeName");
-            const rateEl = document.getElementById("employeeRate");
-            const name = nameEl.value.trim();
-            const rate = parseFloat(rateEl.value);
-
-            // 修正：原本程式碼判斷了不存在的 date 變數
-            if (!name || isNaN(rate)) {
-                alert("請輸入完整的姓名與正確的時薪數字！");
-                return;
-            }
-
-            let employees = getEmployees();
-            const index = employees.findIndex(e => e.name === name);
-            
-            if (index >= 0) {
-                if(confirm(`員工 ${name} 已存在，是否更新時薪？`)) {
-                    employees[index].rate = rate;
-                } else { return; }
+        let alertMessage = "";
+        
+        if (btn.innerText === "上班") {
+            if (!tempTimeRecords[currentDay]) {
+                tempTimeRecords[currentDay] = { s: currentTimeString, e: "", ocr_s: "", ocr_e: "" };
             } else {
-                employees.push({ name, rate });
+                tempTimeRecords[currentDay].s = currentTimeString;
             }
-
-            saveEmployees(employees);
-            renderEmployees();
+            alertMessage = `打卡成功！(${hh}:${mm})`;
             
-            // 清空輸入框
-            nameEl.value = "";
-            rateEl.value = "";
-        }
-
-        function editEmployee(index) {
-            const employees = getEmployees();
-            document.getElementById("employeeName").value = employees[index].name;
-            document.getElementById("employeeRate").value = employees[index].rate;
-            // 捲動到頂部方便編輯
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-
-        function deleteEmployee(index) {
-            if (confirm("確定要刪除這位員工嗎？")) {
-                let employees = getEmployees();
-                employees.splice(index, 1);
-                saveEmployees(employees);
-                renderEmployees();
+            // 體感優化：本地先改外觀
+            btn.innerText = "下班";
+            btn.className = "punch-btn duty-out";
+        } else {
+            if (!tempTimeRecords[currentDay]) {
+                tempTimeRecords[currentDay] = { s: "", e: currentTimeString, ocr_s: "", ocr_e: "" };
+            } else {
+                tempTimeRecords[currentDay].e = currentTimeString;
             }
+            alertMessage = `打卡成功！(${hh}:${mm})`;
+            
+            // 體感優化：本地先改外觀
+            btn.innerText = "上班";
+            btn.className = "punch-btn duty-in";
         }
 
-        // 初始化
-        renderEmployees();
-    </script>
+        showLoading("正在上傳...");
+        calculate(); // 這邊內部會調用最新的快取做渲染
+
+        const isSaved = await saveToGoogleSheet();
+        if (isSaved) {
+            hideLoadingWithSuccess(`🎉 ${alertMessage}\n上傳成功！`);
+        } else {
+            forceHideLoading();
+            // 如果同步失敗，重刷一次正確狀態防呆
+            updatePunchButtonState();
+            alert(`${alertMessage}\n\n⚠️本地暫存成功，但雲端同步失敗，請檢查網路！`);
+        }
+    }
+
+    function getDuration(startStr, endStr) {
+        if (!startStr || !endStr || startStr === "" || endStr === "") return 0;
+        const s = parseTime(startStr), e = parseTime(endStr);
+        if (!s || !e) return 0;
+        
+        let rS = Math.ceil(s.total / 30) * 30;
+        let rE = Math.floor(e.total / 30) * 30;
+        let diff = rE - rS;
+        if (diff < 0) diff += 1440;
+        let hrs = diff / 60;
+        
+        if (hrs > 8) { hrs = hrs - 1; }
+        else if (hrs > 4) { hrs = hrs - 0.5; }
+        return hrs;
+    }
+
+    function calculate() {
+        try {
+            const tbody = document.getElementById('workDates');
+            const noDataBox = document.getElementById('noDataContainer');
+            const totalBlock = document.getElementById('salaryTotalBlock');
+
+            const rate = FIXED_EMPLOYEE.rate;
+            const year = document.getElementById('selectyear').value;
+            const month = document.getElementById('selectmonth').value;
+            const weeks = ['日', '一', '二', '三', '四', '五', '六'];
+            
+            document.getElementById("printYearStr").innerText = year;
+            document.getElementById("printMonthStr").innerText = month;
+
+            tbody.innerHTML = '';
+            let totalSalary = 0;
+
+            if (!tempTimeRecords || typeof tempTimeRecords !== 'object') {
+                tempTimeRecords = {};
+            }
+
+            const keys = Object.keys(tempTimeRecords).sort((a, b) => a - b);
+
+            if (keys.length === 0) {
+                noDataBox.innerHTML = '<div id="noDataHint">本月尚無資料，請點擊「上班」或「上傳」。</div>';
+                totalBlock.style.display = "none";
+                document.getElementById("headerTotalSalary").innerText = "0";
+                document.getElementById("headerFinalSalary").innerText = "0";
+            } else {
+                noDataBox.innerHTML = '';
+                totalBlock.style.display = "block";
+                
+                keys.forEach(d => {
+                    const record = tempTimeRecords[d] || { s: "", e: "", ocr_s: "", ocr_e: "" };
+                    const dateObj = new Date(year, month - 1, d);
+                    const phoneHrs = getDuration(record.s, record.e);
+                    const ocrHrs = getDuration(record.ocr_s, record.ocr_e);
+
+                    let finalHrs = 0; let note = ""; let isAbnormal = false;
+                    const hasPhoneData = (record.s && record.e);
+                    const hasOcrData = (record.ocr_s && record.ocr_e);
+
+                    if (hasPhoneData && hasOcrData) {
+                        finalHrs = ocrHrs; 
+                        if (phoneHrs !== ocrHrs) {
+                            isAbnormal = true;
+                            note = `⚠️ 時數不一致！<br>📱 手機：${phoneHrs}h<br>🖼️ 圖片：${ocrHrs}h<br><span style="color:var(--danger); font-size:11px; font-weight:bold;">(已自動以圖片計薪)</span>`;
+                        } else {
+                            note = `✅ 時數吻合 (${finalHrs}h)`;
+                        }
+                    } else if (hasPhoneData && !hasOcrData) {
+                        finalHrs = phoneHrs;
+                        note = `[手機:${phoneHrs}h]<br><span style="color:var(--text-sub); font-size:11px;">(尚未匯入圖片比對)</span>`;
+                    } else if (!hasPhoneData && hasOcrData) {
+                        finalHrs = ocrHrs; isAbnormal = true; 
+                        note = `⚠️ 漏手機打卡！<br>🖼️ 圖片：${ocrHrs}h<br><span style="color:var(--success); font-size:11px; font-weight:bold;">(已依圖片自動計薪)</span>`;
+                    } else {
+                        isAbnormal = true; finalHrs = 0;
+                        note = `⚠️ 紀錄不完整 (缺打卡)`;
+                    }
+
+                    const pay = Math.floor(finalHrs * rate);
+                    totalSalary += pay;
+
+                    const row = document.createElement('tr');
+                    if (isAbnormal) row.className = 'abnormal-row';
+
+                    row.innerHTML = `
+                        <td>
+                            <div class="date-title-box">
+                                <span class="date-text">${month}/${d.toString().padStart(2, '0')}</span>
+                                <span class="week-text">(${weeks[dateObj.getDay()] || ''})</span>
+                            </div>
+                        </td>
+                        <td class="info-line" data-label="計薪工時：">${finalHrs} 小時</td>
+                        <td class="info-line" data-label="當日明細：">${pay} 元</td>
+                        <td class="print-td-note"><div class="note-box">${note}</div></td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            }
+
+            const final = totalSalary - LABOR_FEE - HEALTH_FEE;
+            document.getElementById("headerTotalSalary").innerText = totalSalary;
+            document.getElementById("headerFinalSalary").innerText = final;
+            document.getElementById("footerTotalSalary").innerText = totalSalary + " 元";
+            document.getElementById("footerFinalSalary").innerText = final + " 元";
+            
+            // ⚡【核心修正】：每次渲染報表時，順便強制校正一次按鈕外觀，萬無一失
+            updatePunchButtonState();
+
+        } catch (innerError) {
+            console.error(innerError);
+        }
+    }
+
+    function parseTime(str) {
+        if (!str) return null;
+        const cleanStr = String(str).replace(/[:：\s]/g, ''); 
+        if (!/^\d{4}$/.test(cleanStr)) return null;
+        return { total: parseInt(cleanStr.substring(0, 2)) * 60 + parseInt(cleanStr.substring(2, 4)) };
+    }
+
+    async function saveToGoogleSheet() {
+        const year = document.getElementById("selectyear").value;
+        const month = document.getElementById("selectmonth").value;
+        const empName = FIXED_EMPLOYEE.name;
+        const payload = JSON.stringify({ action: "save", empName: empName, year: year, month: month, records: tempTimeRecords });
+
+        try {
+            const response = await fetch(GAS_WEB_APP_URL, { method: "POST", mode: "cors", headers: { "Content-Type": "text/plain" }, body: payload });
+            const result = await response.json();
+            if (result && result.status === "success") { return true; }
+        } catch (e) {}
+
+        try {
+            await fetch(GAS_WEB_APP_URL, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain" }, body: payload });
+            return true;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    async function loadData() {
+        const year = document.getElementById("selectyear").value;
+        const month = document.getElementById("selectmonth").value;
+        const empName = FIXED_EMPLOYEE.name;
+        
+        showLoading("讀取資料...");
+
+        try {
+            const url = `${GAS_WEB_APP_URL}?empName=${encodeURIComponent(empName)}&year=${year}&month=${month}`;
+            const response = await fetch(url, { method: "GET", mode: "cors" });
+            const result = await response.json();
+            
+            if (result && result.records && typeof result.records === 'object') {
+                tempTimeRecords = result.records;
+            } else {
+                tempTimeRecords = {};
+            }
+            showLoading("雲端資料讀取完成，正在產生報表...");
+        } catch (error) {
+            console.error("雲端讀取失敗:", error);
+            if (!tempTimeRecords) tempTimeRecords = {};
+        }
+        
+        calculate();
+        hideLoadingWithSuccess("讀取完成！");
+    }
+
+    document.getElementById('uploadOCR').addEventListener('change', async function(e) {
+        const files = e.target.files;
+        if (!files.length) return;
+        const currentMonth = document.getElementById('selectmonth').value.padStart(2, '0');
+        
+        showLoading("圖片智慧辨識中，請稍候...");
+        
+        let fileCount = 0;
+        for (let file of files) {
+            fileCount++;
+            showLoading(`正在辨識第 ${fileCount} / ${files.length} 張圖片...`);
+            try {
+                const { data: { text } } = await Tesseract.recognize(file, 'eng');
+                text.split('\n').forEach(line => {
+                    const match = line.match(/(\d{4})[-\/](\d{2})[-\/](\d{2})\s+(\d{2})[:：\s](\d{2})/);
+                    if (match && match[2] === currentMonth) {
+                        const d = parseInt(match[3], 10);
+                        const hhmm = match[4] + match[5];
+                        if (!tempTimeRecords[d]) tempTimeRecords[d] = { s: "", e: "", ocr_s: "", ocr_e: "" };
+                        if (line.includes('下') || (tempTimeRecords[d].ocr_s !== "" && tempTimeRecords[d].ocr_s !== hhmm)) {
+                            tempTimeRecords[d].ocr_e = hhmm;
+                        } else {
+                            tempTimeRecords[d].ocr_s = hhmm;
+                        }
+                    }
+                });
+            } catch (err) { console.error(err); }
+        }
+        
+        showLoading("辨識完成！正在同步雲端資料庫...");
+        calculate();
+        await saveToGoogleSheet();
+        
+        this.value = "";
+        hideLoadingWithSuccess("上傳成功！");
+    });
+
+    async function clearTable() {
+        if (confirm("確定清除本月雲端與網頁紀錄？")) {
+            const year = document.getElementById("selectyear").value;
+            const month = document.getElementById("selectmonth").value;
+            const empName = FIXED_EMPLOYEE.name;
+
+            showLoading("正在清除紀錄並同步雲端...");
+            tempTimeRecords = {};
+            calculate();
+            try {
+                await fetch(GAS_WEB_APP_URL, {
+                    method: "POST",
+                    mode: "no-cors",
+                    headers: { "Content-Type": "text/plain" },
+                    body: JSON.stringify({ action: "clear", empName: empName, year: year, month: month })
+                });
+            } catch (error) {
+                console.error(error);
+            }
+            hideLoadingWithSuccess("清除成功！");
+        }
+    }
+
+    window.onload = () => { 
+        initYearMonth(); 
+        displayFixedEmployeeInfo();
+        loadData(); 
+    };
+</script>
 </body>
 </html>
